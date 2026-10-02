@@ -18,6 +18,7 @@ namespace PerfectCuboid
             EulerBrickAndOutput,
             Testing,
             EulerAll,
+            CompleteEuler,
         }
         static void Main(string[] args)
         {
@@ -40,7 +41,9 @@ namespace PerfectCuboid
             //Detector d = new Detector(n);
             //d.Go();
 
-            string filename = string.Format(@"c:\temp\cuboid_Summary_{0}-{1}_{2}.txt", m, n, DateTime.Now.ToString("yyyyMMdd_HHmm"));
+            string filename = Path.Combine(
+                Path.GetTempPath(),
+                string.Format("cuboid_Summary_{0}-{1}_{2}.txt", m, n, DateTime.Now.ToString("yyyyMMdd_HHmm")));
             using (TextWriter summaryFile = new StreamWriter(filename))
             {
                 DateTime allTimer = DateTime.Now;
@@ -102,7 +105,7 @@ namespace PerfectCuboid
                 // 2.8: 2/12/2017
                 //   * Ver 2.7 is actually not fully true. it could have n^8 as factor, or not. Revert back to version 2.2, 
                 //     just check 16a^2b^2+c^4. The change in ver2.5 cost too much time. 
-                string ver = "2.8";
+                string ver = "3.0";
 
                 string output = string.Format("Version {0}, start at {1}, from {2} to {3}, action:{4}", 
                     ver, allTimer, m, n, action.ToString());
@@ -151,6 +154,23 @@ namespace PerfectCuboid
                     EulerBrick eb = new EulerBrick(m, n, summaryFile);
                     foundCount = eb.GenerateAllEulerBricks();
                 }
+                else if (action == Action.CompleteEuler)
+                {
+                    CompleteEulerSearchOptions options =
+                        ParseCompleteEulerOptions(args, m, n);
+                    CompleteEulerBrickSearch search =
+                        new CompleteEulerBrickSearch(m, n, summaryFile, options);
+                    try
+                    {
+                        foundCount = search.Search().PerfectCuboids;
+                    }
+                    catch (InvalidOperationException exception)
+                    {
+                        Utils.Output(summaryFile, "CompleteEuler stopped safely: " + exception.Message);
+                        Environment.ExitCode = 2;
+                        return;
+                    }
+                }
                 else
                 {
                     EulerBrick eb = new PerfectCuboid.EulerBrick(m, n, summaryFile);
@@ -168,7 +188,79 @@ namespace PerfectCuboid
         {
             Console.WriteLine("");
             Console.WriteLine("Usage: PerfectCuboid.exe <from number> <top number>");
+            Console.WriteLine("Actions: EulerBrick (formula family), CompleteEuler (all Euler bricks in edge range), Testing");
+            Console.WriteLine("CompleteEuler options:");
+            Console.WriteLine("  --smallest-from N       First smallest-edge value handled by this shard");
+            Console.WriteLine("  --smallest-to N         Last smallest-edge value handled by this shard");
+            Console.WriteLine("  --checkpoint PATH       Resume checkpoint file");
+            Console.WriteLine("  --results PATH          Persistent discoveries and run summaries");
+            Console.WriteLine("  --max-memory-mb N       Stop safely if managed memory exceeds N MiB");
+            Console.WriteLine("  --checkpoint-every N    Save after N smallest-edge vertices (default 1000)");
+            Console.WriteLine("  --progress-seconds N    Progress interval (default 10)");
+            Console.WriteLine("  --no-resume             Start a fresh checkpoint");
             Console.WriteLine("");
+        }
+
+        private static CompleteEulerSearchOptions ParseCompleteEulerOptions(
+            string[] args,
+            UInt64 low,
+            UInt64 high)
+        {
+            CompleteEulerSearchOptions options = new CompleteEulerSearchOptions();
+            options.SmallestEdgeFrom = low;
+            options.SmallestEdgeTo = high;
+            options.CheckpointPath = Path.Combine(
+                Environment.CurrentDirectory,
+                string.Format("perfectcuboid-{0}-{1}.checkpoint", low, high));
+            options.ResultsPath = Path.Combine(
+                Environment.CurrentDirectory,
+                string.Format("perfectcuboid-{0}-{1}.results.log", low, high));
+
+            for (int i = 3; i < args.Length; i++)
+            {
+                string option = args[i];
+                if (option == "--no-resume")
+                {
+                    options.Resume = false;
+                    continue;
+                }
+
+                if (i + 1 >= args.Length)
+                {
+                    throw new ArgumentException("Missing value for " + option);
+                }
+
+                string value = args[++i];
+                switch (option)
+                {
+                    case "--smallest-from":
+                        options.SmallestEdgeFrom = UInt64.Parse(value);
+                        break;
+                    case "--smallest-to":
+                        options.SmallestEdgeTo = UInt64.Parse(value);
+                        break;
+                    case "--checkpoint":
+                        options.CheckpointPath = Path.GetFullPath(value);
+                        break;
+                    case "--results":
+                        options.ResultsPath = Path.GetFullPath(value);
+                        break;
+                    case "--max-memory-mb":
+                        options.MaxMemoryMB = UInt64.Parse(value);
+                        break;
+                    case "--checkpoint-every":
+                        options.CheckpointEveryVertices = UInt64.Parse(value);
+                        break;
+                    case "--progress-seconds":
+                        options.ProgressSeconds = Int32.Parse(value);
+                        break;
+                    default:
+                        throw new ArgumentException("Unknown CompleteEuler option: " + option);
+                }
+            }
+
+            options.Validate(low, high);
+            return options;
         }
     }
 }

@@ -150,10 +150,12 @@ namespace PerfectCuboid
             m = mIn;
             n = nIn;
 
-            BigInteger m2 = m * m;
-            BigInteger n2 = n * n;
+            BigInteger bigM = new BigInteger(m);
+            BigInteger bigN = new BigInteger(n);
+            BigInteger m2 = bigM * bigM;
+            BigInteger n2 = bigN * bigN;
             BigInteger a = m2 - n2;
-            BigInteger b = (m * n) << 1;
+            BigInteger b = (bigM * bigN) << 1;
             BigInteger c = m2 + n2;
             pt = new DataNode(a, b, c);
 
@@ -168,6 +170,7 @@ namespace PerfectCuboid
             BigInteger X = a * b_diff_c;
             BigInteger Y = b * a_diff_c;
             BigInteger Z = (a << 2) * b * c;
+            PerfectCuboidMath.Normalize(ref X, ref Y, ref Z);
             BigInteger G = X * X + Y * Y + Z * Z;
             eb = new DataNode(X, Y, Z, G);
             //eb2 = new DataNode(X*Y, Y*Z, Z*X, ...)
@@ -175,41 +178,34 @@ namespace PerfectCuboid
             // X^2 + Y^2 + Z^2 = c^6 + (4abc)^2 = c^2(16a^2b^2 + c^4). 
             // Thus, check if G is a perfect square is the same as check "16a^2b^2+c^4" is a perfect square.
             // To save the calculation of c, (16a^2b^2 + c^4) or = (16a^2b^2 + a^4 + 2a^2b^2 + b^4) = (a^4 + 18a^2b^2 + b^4)
-            BigInteger a2 = a * a;
-            BigInteger b2 = b * b;
-            //BigInteger a2b2_18 = a2 * b2 * 18;
-            BigInteger a2b2_16 = (a2 * b2) << 4;
-            check = a2b2_16 + c * c * c * c;
-            BigInteger xyNoAB = b_diff_c * a_diff_c;
-            BigInteger yzNoAB = Y * (c << 2);
-            BigInteger zxNoAB = (Z << 2) * X;
-            //check2 = xy * xy + yz * yz + zx * zx;
-            // Since xy, yz, zx are all contains ab, thus the final check can save a^2b^2
+            check = G;
 
-            // check2 = BigInteger.One;
-            check2 = xyNoAB * xyNoAB + yzNoAB * yzNoAB + zxNoAB * zxNoAB;
+            // The products of the three edges form another Euler brick. Normalize it
+            // before testing so scaled copies do not make the arithmetic unnecessarily large.
+            BigInteger XY = X * Y;
+            BigInteger YZ = Y * Z;
+            BigInteger ZX = Z * X;
+            PerfectCuboidMath.Normalize(ref XY, ref YZ, ref ZX);
+            check2 = XY * XY + YZ * YZ + ZX * ZX;
         }
 
         public bool DataCheck()
         {
-            UInt64 lastD = (UInt64)(check % 10);
-            if ((lastD == 1) || (lastD == 5) || (lastD == 9))
+            BigInteger diagonal;
+            if (PerfectCuboidMath.TryGetPerfectSpaceDiagonal(eb._A, eb._B, eb._C, out diagonal))
             {
                 valid = true;
-                if (Utils.IsPerfectSquare(check))
-                {
-                    return true;
-                }
+                return true;
             }
 
-            lastD = (UInt64)(check2 % 10);
-            if ((lastD == 1) || (lastD == 5) || (lastD == 9))
+            BigInteger XY = eb._A * eb._B;
+            BigInteger YZ = eb._B * eb._C;
+            BigInteger ZX = eb._C * eb._A;
+            PerfectCuboidMath.Normalize(ref XY, ref YZ, ref ZX);
+            if (PerfectCuboidMath.TryGetPerfectSpaceDiagonal(XY, YZ, ZX, out diagonal))
             {
                 valid = true;
-                if (Utils.IsPerfectSquare(check2))
-                {
-                    return true;
-                }
+                return true;
             }
 
             return false;
@@ -706,37 +702,187 @@ namespace PerfectCuboid
     //    }
     //}
 
+    static class PerfectCuboidMath
+    {
+        private static readonly int[] SquareModuli = new int[]
+        {
+            16, 9, 5, 7, 11, 13, 17, 19, 23, 29, 31
+        };
+
+        private static readonly bool[][] QuadraticResidues = BuildQuadraticResidues();
+
+        private static bool[][] BuildQuadraticResidues()
+        {
+            bool[][] residues = new bool[SquareModuli.Length][];
+            for (int i = 0; i < SquareModuli.Length; i++)
+            {
+                int modulus = SquareModuli[i];
+                residues[i] = new bool[modulus];
+                for (int value = 0; value < modulus; value++)
+                {
+                    residues[i][(value * value) % modulus] = true;
+                }
+            }
+            return residues;
+        }
+
+        public static UInt64 GreatestCommonDivisor(UInt64 a, UInt64 b)
+        {
+            while (b != 0)
+            {
+                UInt64 remainder = a % b;
+                a = b;
+                b = remainder;
+            }
+            return a;
+        }
+
+        public static BigInteger GreatestCommonDivisor(BigInteger a, BigInteger b)
+        {
+            return BigInteger.GreatestCommonDivisor(BigInteger.Abs(a), BigInteger.Abs(b));
+        }
+
+        public static void Normalize(ref BigInteger x, ref BigInteger y, ref BigInteger z)
+        {
+            BigInteger divisor = GreatestCommonDivisor(GreatestCommonDivisor(x, y), z);
+            if (divisor > BigInteger.One)
+            {
+                x /= divisor;
+                y /= divisor;
+                z /= divisor;
+            }
+        }
+
+        public static bool PassesNecessaryEdgeFilters(BigInteger x, BigInteger y, BigInteger z)
+        {
+            if (x <= 0 || y <= 0 || z <= 0)
+            {
+                return false;
+            }
+
+            int oddCount = 0;
+            if (!x.IsEven) oddCount++;
+            if (!y.IsEven) oddCount++;
+            if (!z.IsEven) oddCount++;
+            if (oddCount != 1)
+            {
+                return false;
+            }
+
+            int divisibleByThree = 0;
+            if (x % 3 == 0) divisibleByThree++;
+            if (y % 3 == 0) divisibleByThree++;
+            if (z % 3 == 0) divisibleByThree++;
+            if (divisibleByThree < 2)
+            {
+                return false;
+            }
+
+            if (x % 5 != 0 && y % 5 != 0 && z % 5 != 0)
+            {
+                return false;
+            }
+
+            if (x % 4 != 0 && y % 4 != 0 && z % 4 != 0)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        public static bool PassesSquareResidueSieve(BigInteger value)
+        {
+            if (value < 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < SquareModuli.Length; i++)
+            {
+                int residue = (int)(value % SquareModuli[i]);
+                if (!QuadraticResidues[i][residue])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public static BigInteger IntegerSquareRoot(BigInteger value)
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException("value", "Square root requires a non-negative integer.");
+            }
+            if (value < 2)
+            {
+                return value;
+            }
+
+            byte[] bytes = value.ToByteArray();
+            int last = bytes.Length - 1;
+            while (last > 0 && bytes[last] == 0)
+            {
+                last--;
+            }
+
+            int highByteBits = 0;
+            int highByte = bytes[last];
+            while (highByte > 0)
+            {
+                highByteBits++;
+                highByte >>= 1;
+            }
+
+            int bitLength = last * 8 + highByteBits;
+            BigInteger estimate = BigInteger.One << ((bitLength + 1) / 2);
+            while (true)
+            {
+                BigInteger next = (estimate + value / estimate) >> 1;
+                if (next >= estimate)
+                {
+                    return estimate;
+                }
+                estimate = next;
+            }
+        }
+
+        public static bool TryGetPerfectSpaceDiagonal(
+            BigInteger x,
+            BigInteger y,
+            BigInteger z,
+            out BigInteger diagonal)
+        {
+            Normalize(ref x, ref y, ref z);
+            diagonal = BigInteger.Zero;
+
+            if (!PassesNecessaryEdgeFilters(x, y, z))
+            {
+                return false;
+            }
+
+            BigInteger sum = x * x + y * y + z * z;
+            if (!PassesSquareResidueSieve(sum))
+            {
+                return false;
+            }
+
+            diagonal = IntegerSquareRoot(sum);
+            return diagonal * diagonal == sum;
+        }
+    }
+
     class Utils
     {
         public static bool IsPerfectSquare(BigInteger N)
         {
-            //if (N > 0) return false;
-            int shift = (((int)(BigInteger.Log(N, 2)) + 1) >> 1) << 1;
-            BigInteger bit = BigInteger.One << shift;
-            BigInteger num = N;
-            BigInteger res = 0;
-
-            // "bit" starts at the highest power of four <= the argument.
-            while (bit > num)
+            if (N < 0)
             {
-                bit >>= 2;
+                return false;
             }
-
-            while (bit > 0)
-            {
-                if (num < res + bit)
-                {
-                    res >>= 1;
-                }
-                else
-                {
-                    num -= res + bit;
-                    res = (res >> 1) + bit;
-                }
-                bit >>= 2;
-            }
-
-            return num == 0;
+            BigInteger root = PerfectCuboidMath.IntegerSquareRoot(N);
+            return root * root == N;
         }
         public static BigInteger BigDataAbsoluteSquareDiff(BigInteger a, BigInteger b)
         {

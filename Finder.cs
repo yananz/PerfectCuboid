@@ -244,7 +244,7 @@ namespace PerfectCuboid
         {
             string result = string.Empty;
             //int binaryThreshold = 3;
-            int i, j, k;
+            int i, j;
 
             int nodeCount = data.Count;
             if (nodeCount == 0)
