@@ -69,10 +69,25 @@ jobs:
           "@
           $notes | Out-File -FilePath release-notes.md -Encoding utf8
 
-          gh release create $env:RELEASE_TAG `
-            artifacts/windows-x64/PerfectCuboid.exe `
-            artifacts/windows-x64/PerfectCuboid.dll.config `
-            --verify-tag `
-            --title "PerfectCuboid $env:RELEASE_TAG" `
-            --generate-notes `
-            --notes-file release-notes.md
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG `
+              artifacts/windows-x64/PerfectCuboid.exe `
+              artifacts/windows-x64/PerfectCuboid.dll.config `
+              --clobber
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            gh release edit $env:RELEASE_TAG `
+              --title "PerfectCuboid $env:RELEASE_TAG" `
+              --notes-file release-notes.md
+          }
+          else {
+            gh release create $env:RELEASE_TAG `
+              artifacts/windows-x64/PerfectCuboid.exe `
+              artifacts/windows-x64/PerfectCuboid.dll.config `
+              --verify-tag `
+              --title "PerfectCuboid $env:RELEASE_TAG" `
+              --generate-notes `
+              --notes-file release-notes.md
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
