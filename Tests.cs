@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -96,6 +97,9 @@ namespace PerfectCuboid
             TestLastDigital(new BigUInt(1234567), 7);
             TestLastDigital(new BigUInt(11223344), 4);
 
+            Console.WriteLine("    ");
+            TestEulerBrickFiltersAndSearch();
+
             DataNode dn = new DataNode(4, 3, 5);
             Console.WriteLine("dn = {0}", dn.ToString());
             dn = new DataNode(7, 9, 8, 12);
@@ -151,6 +155,121 @@ namespace PerfectCuboid
             UInt64 result = (UInt64)(N % 10);
             _AllPassed = _AllPassed && (result == expect);
             Console.WriteLine("{0} : Test TestIsOdd: {1}, {2}:{3}", result == expect ? "Succeeded" : "Failed", N, result, expect);
+        }
+
+        private static void TestEulerBrickFiltersAndSearch()
+        {
+            BigInteger x = 44;
+            BigInteger y = 117;
+            BigInteger z = 240;
+
+            TestCondition(
+                "Known Euler brick passes necessary perfect-cuboid filters",
+                PerfectCuboidMath.PassesNecessaryEdgeFilters(x, y, z));
+
+            BigInteger spaceDiagonalSquared = x * x + y * y + z * z;
+            TestCondition(
+                "Known Euler brick has no integer space diagonal",
+                !Utils.IsPerfectSquare(spaceDiagonalSquared));
+
+            DataSet formulaBrick = new DataSet(2, 1);
+            TestCondition(
+                "Formula m=2,n=1 generates the 44,117,240 Euler brick",
+                formulaBrick.eb._A == 44 &&
+                formulaBrick.eb._B == 117 &&
+                formulaBrick.eb._C == 240);
+
+            TestCondition(
+                "Square residue sieve accepts an actual square",
+                PerfectCuboidMath.PassesSquareResidueSieve(new BigInteger(1234567) * 1234567));
+
+            TestCondition(
+                "Exact integer square root handles values above UInt64",
+                PerfectCuboidMath.IntegerSquareRoot(BigInteger.Pow(2, 160)) == BigInteger.Pow(2, 80));
+
+            CompleteEulerSearchResult result =
+                new CompleteEulerBrickSearch(1, 240, null).Search();
+            TestCondition(
+                "Complete Euler graph finds exactly the known 44,117,240 brick in range",
+                result.PrimitiveEulerBricks == 1);
+            TestCondition(
+                "No perfect cuboid is reported in the small regression range",
+                result.PerfectCuboids == 0);
+
+            TestCompleteEulerShards();
+            TestCompleteEulerCheckpointResume();
+        }
+
+        private static void TestCompleteEulerShards()
+        {
+            CompleteEulerSearchOptions firstOptions = new CompleteEulerSearchOptions();
+            firstOptions.SmallestEdgeFrom = 1;
+            firstOptions.SmallestEdgeTo = 100;
+            firstOptions.ProgressSeconds = 3600;
+
+            CompleteEulerSearchOptions secondOptions = new CompleteEulerSearchOptions();
+            secondOptions.SmallestEdgeFrom = 101;
+            secondOptions.SmallestEdgeTo = 240;
+            secondOptions.ProgressSeconds = 3600;
+
+            CompleteEulerSearchResult first =
+                new CompleteEulerBrickSearch(1, 240, null, firstOptions).Search();
+            CompleteEulerSearchResult second =
+                new CompleteEulerBrickSearch(1, 240, null, secondOptions).Search();
+
+            TestCondition(
+                "Disjoint smallest-edge shards equal the unsharded Euler-brick count",
+                first.PrimitiveEulerBricks + second.PrimitiveEulerBricks == 1);
+        }
+
+        private static void TestCompleteEulerCheckpointResume()
+        {
+            string stem = Path.Combine(
+                Path.GetTempPath(),
+                "PerfectCuboid-test-" + Guid.NewGuid().ToString("N"));
+            string checkpointPath = stem + ".checkpoint";
+            string resultsPath = stem + ".results.log";
+
+            try
+            {
+                CompleteEulerSearchOptions options = new CompleteEulerSearchOptions();
+                options.SmallestEdgeFrom = 1;
+                options.SmallestEdgeTo = 240;
+                options.CheckpointPath = checkpointPath;
+                options.ResultsPath = resultsPath;
+                options.CheckpointEveryVertices = 1;
+                options.ProgressSeconds = 3600;
+                options.Resume = false;
+
+                CompleteEulerSearchResult first =
+                    new CompleteEulerBrickSearch(1, 240, null, options).Search();
+
+                options.Resume = true;
+                CompleteEulerSearchResult resumed =
+                    new CompleteEulerBrickSearch(1, 240, null, options).Search();
+
+                TestCondition(
+                    "Checkpointed complete search finishes its first run",
+                    first.PrimitiveEulerBricks == 1 &&
+                    File.ReadAllText(checkpointPath).Contains("done=1"));
+                TestCondition(
+                    "Completed checkpoint resumes without repeating enumeration",
+                    resumed.PrimitiveEulerBricks == 0);
+                TestCondition(
+                    "Persistent results contain a run summary",
+                    File.ReadAllText(resultsPath).Contains("summary"));
+            }
+            finally
+            {
+                if (File.Exists(checkpointPath)) File.Delete(checkpointPath);
+                if (File.Exists(resultsPath)) File.Delete(resultsPath);
+            }
+        }
+
+        private static void TestCondition(string name, bool condition)
+        {
+            _AllPassed = _AllPassed && condition;
+            Console.WriteLine("{0} : Test {1}", condition ? "Succeeded" : "Failed", name);
         }
 
     }

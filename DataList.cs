@@ -9,6 +9,8 @@ namespace PerfectCuboid
     class DataList
     {
         public static object _lock = new object();
+        private static System.Threading.ReaderWriterLockSlim _dataLock =
+            new System.Threading.ReaderWriterLockSlim();
 
         // Only public static SortedSet can be thread safe
         public SortedSet<DataNode> _nodes = new SortedSet<DataNode>();
@@ -43,18 +45,33 @@ namespace PerfectCuboid
 
         public void Add(DataNode dn)
         {
-            if (_readyToWriteCount > _countInFile)
+            _dataLock.EnterReadLock();
+            try
             {
-                lock (_lock) ;
+                _nodes.Add(dn);
+                // Some nodes will be filtered out in _nodes for duplicates.
+                System.Threading.Interlocked.Increment(ref DataList._readyToWriteCount);
             }
-            _nodes.Add(dn);
-            // Some nodes will be filtered out in _nodes for duplicates. 
-            // To make it simple, no need to check, still increment the _readyToWriteCount,
-            // but need to recaculate the exactly count based on the sum of all DataList instances.
-            System.Threading.Interlocked.Increment(ref DataList._readyToWriteCount);
+            finally
+            {
+                _dataLock.ExitReadLock();
+            }
         }
 
         public static void Output(DataList[] dataLists, TextWriter twOutput)
+        {
+            _dataLock.EnterWriteLock();
+            try
+            {
+                OutputLocked(dataLists, twOutput);
+            }
+            finally
+            {
+                _dataLock.ExitWriteLock();
+            }
+        }
+
+        private static void OutputLocked(DataList[] dataLists, TextWriter twOutput)
         {
             // using count as temp to keep _readyToWriteCount not changed before write completed
             int count = 0;
@@ -104,10 +121,14 @@ namespace PerfectCuboid
                             while (dnNext != null && dataQueue.ContainsKey(dnNext))
                             {
                                 // skip duplicate in case
-                                dnEnum.MoveNext();
-                                dnNext = dnEnum.Current;
                                 count--;
                                 skip++;
+                                if (!dnEnum.MoveNext())
+                                {
+                                    dnNext = null;
+                                    break;
+                                }
+                                dnNext = dnEnum.Current;
                             }
                         }
                         else

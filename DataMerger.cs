@@ -9,8 +9,10 @@ namespace PerfectCuboid
     {
         public const string PathToFile = @"Working";
         public const string PatternOfFile = "Cuboid.{0}";
-        public const string FilePatternPPT = PathToFile + @"\" + PatternOfFile + ".pptf";
-        public const string FilePatternNPT = PathToFile + @"\" + PatternOfFile + ".nptf";
+        public static readonly string FilePatternPPT =
+            Path.Combine(PathToFile, PatternOfFile + ".pptf");
+        public static readonly string FilePatternNPT =
+            Path.Combine(PathToFile, PatternOfFile + ".nptf");
 
         private List<string> _files = new List<string>();
         private SortedList<DataNode, DataIOReader> _dataQueue = new SortedList<DataNode, DataIOReader>();
@@ -32,20 +34,20 @@ namespace PerfectCuboid
             if (_dataQueue.Count > 0)
             {
                 ret = _dataQueue.ElementAt(0).Key;
-                DataNode dnNext = _dataQueue.ElementAt(0).Value.ReadNode();
+                DataIOReader currentReader = _dataQueue.ElementAt(0).Value;
+                _dataQueue.RemoveAt(0);
+                DataNode dnNext = currentReader.ReadNode();
                 //Console.WriteLine("dnNext={0}", dnNext.ToString());
                 while ((dnNext != null) &&
                     _dataQueue.ContainsKey(dnNext))
                 {
-                    dnNext = _dataQueue.ElementAt(0).Value.ReadNode();
+                    dnNext = currentReader.ReadNode();
                 }
 
                 if (dnNext != null)
                 {
-                    _dataQueue.Add(dnNext, _dataQueue.ElementAt(0).Value);
+                    _dataQueue.Add(dnNext, currentReader);
                 }
-
-                _dataQueue.RemoveAt(0);
             }
 
             return ret;
@@ -71,7 +73,7 @@ namespace PerfectCuboid
                 while ((dnNext != null) &&
                     _dataQueue.ContainsKey(dnNext))
                 {
-                    dnNext = _dataQueue.ElementAt(0).Value.ReadNode();
+                    dnNext = readerN.ReadNode();
                 }
 
                 if (dnNext != null)
