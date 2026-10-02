@@ -1,0 +1,78 @@
+name: Publish Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish
+        required: true
+        default: v3.0.0
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Test, build, and publish
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run regression tests
+        run: dotnet run --project PerfectCuboid.Net8.csproj --configuration Release -- 1 2 Testing
+
+      - name: Publish self-contained Windows x64 executable
+        run: >-
+          dotnet publish PerfectCuboid.Net8.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          --output artifacts/windows-x64
+
+      - name: Calculate executable checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash artifacts/windows-x64/PerfectCuboid.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "PERFECT_CUBOID_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          $notes = @"
+          Self-contained Windows x64 build. Keep PerfectCuboid.exe and
+          PerfectCuboid.dll.config in the same directory. No separate .NET
+          installation is required.
+
+          The executable is not code-signed, so Windows SmartScreen may ask
+          you to confirm that you trust it.
+
+          SHA-256 for PerfectCuboid.exe:
+          $env:PERFECT_CUBOID_SHA256
+          "@
+          $notes | Out-File -FilePath release-notes.md -Encoding utf8
+
+          gh release create $env:RELEASE_TAG `
+            artifacts/windows-x64/PerfectCuboid.exe `
+            artifacts/windows-x64/PerfectCuboid.dll.config `
+            --verify-tag `
+            --title "PerfectCuboid $env:RELEASE_TAG" `
+            --generate-notes `
+            --notes-file release-notes.md
