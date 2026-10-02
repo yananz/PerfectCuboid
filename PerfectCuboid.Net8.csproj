@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>PerfectCuboid</AssemblyName>
+    <RootNamespace>PerfectCuboid</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="EulerBrick.cs" />
+    <Compile Include="DataList.cs" />
+    <Compile Include="DataMerger.cs" />
+    <Compile Include="Finder.cs" />
+    <Compile Include="PPT_Formula_m_n.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="Tests.cs" />
+    <Compile Include="utils.cs" />
+    <None Include="App.config" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

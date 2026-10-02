@@ -34,6 +34,11 @@ the same directory, then run it from PowerShell or Command Prompt; no separate
 The executable is not code-signed, so Windows SmartScreen may ask you to
 confirm that you trust it.
 
+Pushing a version tag such as `v3.0.0` automatically runs the regression tests,
+creates the self-contained executable, and publishes the GitHub Release without
+handling binaries locally. Maintainers can also rerun the **Publish Windows
+release** workflow manually for an existing tag.
+
 ```text
 PerfectCuboid.exe <from> <to> <action>
 ```
